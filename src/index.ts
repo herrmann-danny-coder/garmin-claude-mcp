@@ -102,6 +102,35 @@ export class MyMCP extends McpAgent {
     );
 
     this.server.tool(
+      "getActivityIntervals",
+      { activityId: z.string().describe("Activity id from getRecentActivities, e.g. i214377864") },
+      async ({ activityId }) => {
+        const id = encodeURIComponent(activityId);
+        let raw: any;
+        try {
+          raw = await this.icu(`/activity/${id}/intervals`);
+        } catch {
+          raw = await this.icu(`/activity/${id}?intervals=true`);
+        }
+        const list: any[] = Array.isArray(raw) ? raw : raw?.icu_intervals ?? [];
+        const intervals = list.map((iv: any) => ({
+          type: iv.type ?? null,
+          label: iv.label ?? null,
+          start_time: iv.start_time ?? null,
+          moving_time: iv.moving_time ?? iv.elapsed_time ?? null,
+          distance: iv.distance ?? null,
+          average_speed: iv.average_speed ?? (iv.distance && iv.moving_time ? iv.distance / iv.moving_time : null),
+          gap: iv.gap ?? iv.average_gap ?? null,
+          average_heartrate: iv.average_heartrate ?? null,
+          max_heartrate: iv.max_heartrate ?? null,
+          average_cadence: iv.average_cadence ?? null,
+          group_id: iv.group_id ?? null,
+        }));
+        return { content: [{ type: "text", text: JSON.stringify({ activityId, intervals }) }] };
+      },
+    );
+
+    this.server.tool(
       "deleteEvent",
       { eventId: z.number().describe("Event ID from listUpcomingEvents") },
       async ({ eventId }) => {
