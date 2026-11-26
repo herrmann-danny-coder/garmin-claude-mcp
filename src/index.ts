@@ -131,6 +131,41 @@ export class MyMCP extends McpAgent {
     );
 
     this.server.tool(
+      "getRunSettings",
+      {},
+      async () => {
+        const list: any[] = await this.icu(`/athlete/${athlete}/sport-settings`);
+        const run = (list || []).find((x: any) => (x.types || []).includes("Run"));
+        const out = run ? { id: run.id, types: run.types, lthr: run.lthr ?? null, max_hr: run.max_hr ?? null, hr_zones: run.hr_zones ?? null, hr_zone_names: run.hr_zone_names ?? null, threshold_pace: run.threshold_pace ?? null } : null;
+        return { content: [{ type: "text", text: JSON.stringify(out) }] };
+      },
+    );
+
+    this.server.tool(
+      "updateRunZones",
+      {
+        lthr: z.number().int().min(120).max(210).describe("New lactate threshold heart rate (bpm)"),
+        max_hr: z.number().int().min(140).max(230).optional().describe("New max heart rate (bpm); omit to keep"),
+      },
+      async ({ lthr, max_hr }) => {
+        const list: any[] = await this.icu(`/athlete/${athlete}/sport-settings`);
+        const run = (list || []).find((x: any) => (x.types || []).includes("Run"));
+        if (!run) throw new Error("No Run sport settings found");
+        const oldL = run.lthr;
+        const newMax = max_hr ?? run.max_hr;
+        let zones = run.hr_zones;
+        if (Array.isArray(zones) && zones.length > 1 && oldL) {
+          // keep the athlete's zone model: scale every boundary by newLTHR/oldLTHR, last boundary = max HR
+          zones = zones.map((b: number, i: number) => (i === zones.length - 1 && newMax ? newMax : Math.round((b * lthr) / oldL)));
+        }
+        const body: any = { lthr, hr_zones: zones };
+        if (newMax) body.max_hr = newMax;
+        const data = await this.icu(`/athlete/${athlete}/sport-settings/${run.id}`, { method: "PUT", body: JSON.stringify(body) });
+        return { content: [{ type: "text", text: JSON.stringify({ before: { lthr: oldL, max_hr: run.max_hr, hr_zones: run.hr_zones }, after: { lthr: data?.lthr, max_hr: data?.max_hr, hr_zones: data?.hr_zones } }) }] };
+      },
+    );
+
+    this.server.tool(
       "deleteEvent",
       { eventId: z.number().describe("Event ID from listUpcomingEvents") },
       async ({ eventId }) => {
